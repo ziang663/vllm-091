@@ -191,7 +191,7 @@ class Scheduler(SchedulerInterface):
                 self.preschedule_step += 1
                 self.schedule_condition.notify()    
 
-    def schedule(self) -> SchedulerOutput:
+    def _preschedule(self) -> None:
         # NOTE(woosuk) on the scheduling algorithm:
         # There's no "decoding phase" nor "prefill phase" in the scheduler.
         # Each request just has the num_computed_tokens and
@@ -241,6 +241,7 @@ class Scheduler(SchedulerInterface):
 
             num_new_tokens = (prenum_tokens_with_spec -
                               prenum_computed_token)
+            
             if (0 < self.scheduler_config.long_prefill_token_threshold <
                     num_new_tokens):
                 num_new_tokens = (
@@ -331,7 +332,7 @@ class Scheduler(SchedulerInterface):
             # Speculative decode related.
             if request.spec_token_ids:
                 num_scheduled_spec_tokens = (num_new_tokens +
-                                             request.num_computed_tokens -
+                                             prenum_computed_token -
                                              request.num_tokens)
                 if num_scheduled_spec_tokens > 0:
                     # Trim spec_token_ids list to num_scheduled_spec_tokens.
@@ -992,6 +993,7 @@ class Scheduler(SchedulerInterface):
                 assert not prompt_logprobs_tensors
 
         # Remove the stopped requests from the running and waiting queues.
+        self.output_update_step += 1
         if stopped_running_reqs:
             self.running = [
                 req for req in self.running if req not in stopped_running_reqs
