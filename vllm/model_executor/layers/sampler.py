@@ -40,7 +40,10 @@ logger = init_logger(__name__)
 def get_sampler() -> torch.nn.Module:
     if envs.VLLM_USE_V1:
         # Lazy import: the v1 package isn't distributed
-        from vllm.v1.sample.sampler import Sampler as V1Sampler
+        if envs.PARALLEL_SAMPLING:
+            from vllm.v1.sample.parallel_sampler import ParallelSampler as V1Sampler
+        else:
+            from vllm.v1.sample.sampler import Sampler as V1Sampler
         return V1Sampler()
     return Sampler()
 

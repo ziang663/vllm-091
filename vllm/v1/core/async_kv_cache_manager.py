@@ -71,6 +71,27 @@ class AsyncKVCacheManager(KVCacheManager):
     separated from `allocate_slots` since that asychronizing
     scheduler may cause asseration error.
     """
+    def __init__(
+        self,
+        kv_cache_config: KVCacheConfig,
+        max_model_len: int,
+        enable_caching: bool = True,
+        caching_hash_algo: str = "builtin",
+        use_eagle: bool = False,
+        log_stats: bool = False,
+        enable_kv_cache_events: bool = False,
+        req_to_token: dict = {}  
+) -> None:
+        super().__init__( 
+            kv_cache_config=kv_cache_config,
+            max_model_len=max_model_len,
+            enable_caching=enable_caching,
+            caching_hash_algo=caching_hash_algo,
+            use_eagle=use_eagle,
+            log_stats=log_stats,
+            enable_kv_cache_events=enable_kv_cache_events,
+        )
+        self.req_to_token = req_to_token
     def allocate_slots(
         self,
         request: Request,
@@ -166,6 +187,10 @@ class AsyncKVCacheManager(KVCacheManager):
 
         new_blocks = self.coordinator.allocate_new_blocks(
             request.request_id, num_tokens_need_slot)
+        self.req_to_token[request.request_id] = num_tokens_need_slot
+        num_tokens_to_cache = min(num_computed_tokens + num_new_tokens,
+                                  request.num_tokens)
+        self.request_to_token[request.request_id] = num_tokens_to_cache
 
         # P/D: delay caching blocks if we have to recv from
         # remote. Update state for locally cached blocks.
@@ -178,13 +203,8 @@ class AsyncKVCacheManager(KVCacheManager):
     def cache_full_block(
         self,
         request: Request,
-        num_new_computed_tokens: int,
-        num_new_tokens: int,
     ) -> None:
-        num_computed_tokens = (request.num_computed_tokens +
-                               num_new_computed_tokens)
-        num_tokens_to_cache = min(num_computed_tokens + num_new_tokens,
-                                  request.num_tokens)
+        num_tokens_to_cache = self.request_to_token[request.request_id]
         self.coordinator.cache_blocks(
             request,
             self.req_to_block_hashes[request.request_id],
